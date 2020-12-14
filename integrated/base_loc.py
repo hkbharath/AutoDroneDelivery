@@ -4,6 +4,7 @@ import time
 import threading
 import csv
 import os
+import datetime
 from payloads import *
 import xml.etree.cElementTree as ET
 
@@ -11,14 +12,17 @@ import xml.etree.cElementTree as ET
 task_wait_sleep_time = 10 # in sec
 package_weight = 5 # in kg
 default_port = 33001
+#default_dest = (53.309282, -6.223975)
+default_dest = (53.343473, -6.251387)
+record_path = "../record"
 ###### Constant Configurations ######
 
 def task_exists():
     return True
 
-def get_task():
+def get_task(drone_init):
     # read destination coordinates
-    return BaseTask(package_weight, 0, 0)
+    return BaseTask(drone_init.drone_id, package_weight, default_dest[0], default_dest[1])
 
 def release_task(task):
     return
@@ -27,7 +31,7 @@ def release_task(task):
 def is_exit(drone_id):
     return False
 
-def writeGPXDom(rec_file):
+def writeGPXDom(rec_file, task_id, drone_id):
     
     gpx_root = ET.Element("gpx",
                         xmlns="http://www.topografix.com/GPX/1/1",
@@ -44,15 +48,16 @@ def writeGPXDom(rec_file):
         line_count = 0
         for row in csv_reader:
             ET.SubElement(trkseg, "trkpt",lat = row[1], lon = row[2])
+    tree = ET.ElementTree(gpx_root)
+    tree.write(os.path.join(record_path, "path_%s_%d.gpx"%(task_id, drone_id)))
 
 
-def record_update(task_id, drone_id, drone_update):
+def record_update(task_id, drone_id, drone_update, record_file):
     # record gps data in gpx format
-    record_file = os.path.join("records","simulation_%s_%d.csv"%(task_id, drone_id))
     with open(record_file, 'a', newline='') as rec:
         c_writer = csv.writer(rec)
         c_writer.writerow([drone_id, drone_update.lat, 
-                        drone_update.long, drone_update.height, 
+                        drone_update.lon, drone_update.height, 
                         drone_update.battery_power, drone_update.obstacle,
                         drone_update.sig_str])
 
@@ -61,10 +66,9 @@ def record_update(task_id, drone_id, drone_update):
         longitude={}, height={}, \
         battery-power={}, obstacle={}, \
         signal_strength={}.".format(drone_id, drone_update.lat, 
-                                    drone_update.long, drone_update.height, 
+                                    drone_update.lon, drone_update.height, 
                                     drone_update.battery_power, drone_update.obstacle,
                                     drone_update.sig_str))
-    return record_file
 
 def handle_client(conn, address, lock):
     print("Connected to ", address)
@@ -93,7 +97,7 @@ def handle_client(conn, address, lock):
             
             # send task to initiate the task
             lock.acquire()
-            task = get_task()
+            task = get_task(drone_init)
             lock.release()
 
             conn.send(task)
@@ -111,22 +115,26 @@ def handle_client(conn, address, lock):
                 break
             
             # recieve live updates from client
+            record_file = os.path.join(record_path,
+                    "simulation_%s_%d_%s.csv"%(task.task_id, 
+                    drone_init.drone_id, 
+                    datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
             while True:
                 buff = conn.recv(sizeof(DroneUpdate))
                 drone_update = DroneUpdate.from_buffer_copy(buff)
                 # task complete close connection
-                rec_file = record_update(task.task_id, drone_init.drone_id, drone_update)
+                record_update(task.task_id, drone_init.drone_id, drone_update, record_file)
                 if drone_update.is_complete:
-                    writeGPXDom(rec_file)
+                    writeGPXDom(record_file, task.task_id, drone_init.drone_id)
                     print("Drone:%d -> Task completed successfully."%(drone_init.drone_id))
-                return
+                    return
 
     except BlockingIOError:
         print("socket is open and reading from it would block")
     except ConnectionResetError:
         print("socket was closed")
-    except Exception as e:
-        print("Unexpected Exception!!")
+    # except Exception as e:
+    #     print("Unexpected Exception!!")
     
     return
 
@@ -134,7 +142,8 @@ def start_server(serverSocket):
     serverSocket.listen()
     while True:
         conn, address = serverSocket.accept()
-        thread = threading.Thread(target=handle_client, args=(conn, address))
+        lock = threading.Lock()
+        thread = threading.Thread(target=handle_client, args=(conn, address, lock))
         thread.start()
     
 def main():
@@ -149,15 +158,19 @@ def main():
     if args.port is None:
         args.port = default_port
 
-    serv_host = socket.gethostname()
-    server = socket.gethostbyname(serv_host)
+    #serv_host = socket.gethostname()
+    #server = socket.gethostbyname(serv_host)
+    server = '0.0.0.0'
     addr = (server, args.port)
 
     serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     serverSocket.bind(addr)
 
     print("Starting base_loc server on [{}] at port {}".format(server, args.port))
-    start_server(serverSocket)
+    try:
+        start_server(serverSocket)
+    except Exception as e:
+        serverSocket.close() 
 
     return
 
