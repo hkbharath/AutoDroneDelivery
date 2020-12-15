@@ -10,6 +10,15 @@ class DroneUpdate(Structure):
                 ("is_moving",c_bool),
                 ("is_complete",c_bool)]
 
+class BaseUpdate(Structure):
+    _fields_ = [("is_alert", c_bool),
+                ("al_drone_id", c_uint32)]
+
+class BaseSync(Structure):
+    _fields_ = [("drone_id", c_uint32),
+                ("src_lat", c_float),
+                ("src_lon", c_float)]
+
 class DroneConnect(Structure):
     _fields_ = [("drone_id", c_uint32),
                 ("capacity", c_uint32),
@@ -25,3 +34,11 @@ class BaseTask(Structure):
 
 class Ack(Structure):
     _fields_ = [("is_accepted", c_bool)]
+
+class PeerPayload(Structure):
+    _fields_ = [("lat", c_float),
+                ("lon", c_float),
+                ("height", c_float),
+                ("Drone_id", c_uint32),
+                ("bearing", c_int),
+                ("Deviation", c_float)]

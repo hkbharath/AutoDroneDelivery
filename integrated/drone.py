@@ -4,6 +4,8 @@ import time
 import random
 import os
 import math
+import json
+import threading
 import geopy.distance
 from payloads import *
 from geopy.point import Point
@@ -13,14 +15,85 @@ reconnect_time = 120 # in sec
 default_capacity = 5 # in kg
 default_server = '127.0.0.1'
 default_server_port = 33001
-#default_pos = (53.343473, -6.251387)
-default_pos = (53.309282, -6.223975)
+default_pos = (53.343473, -6.251387)
 avg_speed = 50 # km/h
 ad_time = 3 #time taken for ascent and descent
 max_height = 120 # in m
+seperation = 30 # in m
+bearing_dev = -90 # 90 to the left
+server_config = 'server_setup.json'
 ###### Constant Configurations ######
 
 is_deviate = False
+conflict_pred = []
+
+class PathController:
+    def __init__(self, lat, lon, ele):
+        self.lock = threading.Lock()
+        self.lat = lat
+        self.lon = lon
+        self.ele = ele
+        self.al_drone = 0
+        self.init()
+
+    def init(self):
+        self.is_deviation = False
+        self.dist = 0
+        self.bearing = 0
+        self.height = 0
+
+
+    def set_deviation(self, dist, bearing, height):
+        global conflict_pred
+        self.lock.acquire()
+        self.is_deviation = True
+        self.dist = dist
+        self.bearing = bearing
+        self.height = height
+        conflict_pred = []
+        self.lock.release()
+    
+    def is_deviation_set(self):
+        return self.is_deviation
+    
+    def get_deviation(self):
+        (dist, bearing, height) = (self.dist, self.bearing, self.height)
+
+        self.lock.acquire()
+        # reset the deviation variables
+        self.init()
+        self.lock.release()
+
+        return (dist, bearing, height)
+
+    def get_gps(self):
+        return (self.lat, self.lon, self.ele)
+    
+    def set_gps(self, lat, lon, ele):
+        self.lock.acquire()
+        self.lat = lat
+        self.lon = lon
+        self.ele = ele
+        self.lock.release()
+
+    def set_al_drone(self, drone_id):
+        self.al_drone = drone_id
+    
+    def get_al_drone(self):
+        return self.al_drone
+
+p_controller = None
+
+def get_travel_time(d):
+    return (d/avg_speed)*60*60
+
+def get_drone_conncetion(drone_id):
+    with open(server_config) as sc:
+        servers = json.load(sc)
+        for drone in servers['drones']:
+            if drone['id'] == drone_id:
+                return (drone['ip'], drone['peer_port'])
+    return None
 
 def get_bearing(l_start, l_stop):
     start_lat = math.radians(l_start[0])
@@ -42,21 +115,24 @@ def get_bearing(l_start, l_stop):
 
     return bearing
 
-def path_sim(l_start, l_stop):
+def path_sim(l_start, l_stop, is_conflict_pred=False):
     global is_deviate
 
     d = geopy.distance.distance(l_start, l_stop).km
 
-    t = (d/avg_speed)*60*60
-    # 0th position
-    yield l_start
-
-    #Elevate in 3 seconds
+    t = get_travel_time(d)
+    
     ti = 0
-    for i in range(ad_time):
+
+    if not is_conflict_pred:
+        # 0th position
         yield l_start
-        ti = ti + 1
-        
+
+        #Elevate in 3 seconds
+        for i in range(ad_time):
+            yield l_start
+            ti = ti + 1
+            
     # movement path in straight line    
     #get line equation
     d_lat = (l_stop[0] - l_start[0])/(t - 2 * ad_time)
@@ -67,13 +143,12 @@ def path_sim(l_start, l_stop):
     n_lon = l_start[1]
 
     while ti < (t - ad_time):
-        if is_deviate:
-            #TODO : start thread to get bearing and distance of deviation
-            is_deviate = False
-            d = geopy.distance.distance(meters=10)
+        if not is_conflict_pred and p_controller.is_deviation_set():
+            (dist, bearing, height) = p_controller.get_deviation()
+            d = geopy.distance.distance(meters=dist)
             c_bearing = get_bearing((l_start[0], l_start[1]), (n_lat, n_lon))
-
-            finalp = d.destination(point=Point(n_lat, n_lon), bearing=c_bearing-90)
+            print("Taking deviation %d:%d"%(dist, bearing))
+            finalp = d.destination(point=Point(n_lat, n_lon), bearing = c_bearing + bearing)
 
             n_lat = finalp.latitude
             n_lon = finalp.longitude
@@ -94,14 +169,46 @@ def path_sim(l_start, l_stop):
     for i in range(ad_time):
         yield l_stop
 
+def uv_simulation():
+    while True:
+        if conflict_pred == None or len(conflict_pred) == 0:
+            yield 0
+        else:
+            yield conflict_pred.pop(0)
+
+def communicate_diversion():
+    drone_id = p_controller.get_al_drone()
+    p_addr  = get_drone_conncetion(drone_id)
+    clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # try:
+    # Create a client socket
+    clientSocket.connect(p_addr)
+    print("Successfully connected to drone %s:%d"%(p_addr[0], p_addr[1]))
+
+    # send current location
+    (lat, lon, ele) = p_controller.get_gps()
+    payload = PeerPayload(lat, lon, ele, 0, 0, 0)
+    clientSocket.send(payload)
+    
+    #receieve 
+    buff = clientSocket.recv(sizeof(PeerPayload))
+    payload = PeerPayload.from_buffer_copy(buff)
+    if payload.Deviation != 0:
+        print("Recieved deviation: ", payload.Deviation, payload.bearing)
+        p_controller.set_deviation(payload.Deviation, payload.bearing, 0)
+        return True
+    # except Exception as e:
+    #     print("Failed to connect to drone %s:%d"%(p_addr[0], p_addr[1]))
+    #     clientSocket.close()
+    return False
+
 def get_simulation(init_pos, dest_pos, task_id):
     global is_deviate
     # read sensors data
     bat_f = open(task_id + "_batterydrain.txt", "r")
     ele_f = open(task_id + "_elevation.txt", "r")
     sig_f = open(task_id + "_signal.txt", "r")
-    uv_f = open(task_id + "_uv.txt", "r")
-    
+    uv_sim = uv_simulation()
     gps_sim = path_sim(init_pos, dest_pos)
 
     is_conflict = False
@@ -112,26 +219,68 @@ def get_simulation(init_pos, dest_pos, task_id):
         bat_v = int(bat_f.readline())
         ele_v = float(ele_f.readline())
         sig_v = int(sig_f.readline())
-        uv_v = int(uv_f.readline())
+        uv_v = next(uv_sim)
+        
+        # update curr course
+        p_controller.set_gps(lat, lon, ele_v)
+        
         last_update = DroneUpdate(lat, lon, ele_v, bat_v, uv_v, sig_v, True, False)
         yield last_update
-        if uv_v and not is_conflict:
-            is_deviate = True
-            is_conflict = True
+
+        if uv_v:
+            #get last alert drone and communicate the course
+            if not communicate_diversion():
+                continue
+            
             (lat, lon) = next(gps_sim)
+            
+            # update curr course
+            p_controller.set_gps(lat, lon, ele_v)
+            
             last_update = DroneUpdate(lat, lon, ele_v, bat_v, uv_v, sig_v, True, False)
             yield last_update
-        # conflict stays till the uv_v resets.
-        if is_conflict and not uv_v:
-            is_conflict = False
+
     last_update.is_complete = True
     last_update.is_moving = False
     yield last_update
 
-def get_base_sever(position, server_config):
-    return (default_server, default_server_port)
+def predict_collision(curr_pos, dest_pos):
+    global conflict_pred
+
+    preds = []
+    d = geopy.distance.distance(curr_pos, dest_pos).km
+    t = get_travel_time(d)
+
+    my_gps = path_sim(curr_pos, dest_pos, is_conflict_pred=True)
+    coll_gps = path_sim(dest_pos, curr_pos)
+    for my_pos in my_gps:
+        coll_pos = next(coll_gps)
+
+        d = geopy.distance.distance(my_pos, coll_pos).m
+
+        if d <= 2*seperation:
+            conflict_pred.append(1)
+        else:
+            conflict_pred.append(0)
+
+def get_init_base_server(server_config, server_id):
+    with open(server_config) as sc:
+        servers = json.load(sc)
+        for server in servers['base_servers']:
+            if server['id'] == server_id:
+                return (server['location']['lat'], server['location']['lon']), server['ip'], server['drone_port']
+    return default_pos, default_server, default_server_port
+
+def get_server_for_loc(server_config, init_pos):
+    with open(server_config) as sc:
+        servers = json.load(sc)
+        for server in servers['base_servers']:
+            if abs(server['location']['lat'] - init_pos[0]) < 10e-6 and abs(server['location']['lon'] - init_pos[1]) < 10e-6:
+                return server['ip'], server['drone_port']
+    return default_server, default_server_port
 
 def activate(drone_id, init_pos, server=None, server_port=None, sim_dir="../simulation"):
+
     bl_addr = (server, server_port)
 
     # Create a client socket
@@ -173,10 +322,20 @@ def activate(drone_id, init_pos, server=None, server_port=None, sim_dir="../simu
             break
     
     print("Starting the task %s"%(task_id))
+    
     #start the task
     for sim in get_simulation(init_pos, dest_pos, task_id):
         # sim is DroneUpdate
         clientSocket.send(sim)
+
+        #recieve alert if any
+        buff = clientSocket.recv(sizeof(BaseUpdate))
+        bupdate = BaseUpdate.from_buffer_copy(buff)
+        if bupdate.is_alert:
+            predict_collision((sim.lat, sim.lon), dest_pos)
+            p_controller.set_al_drone(bupdate.al_drone_id)
+        time.sleep(1)
+    
     print("Completed the task %s"%(task_id))
     # close the connection
     clientSocket.close()
@@ -184,8 +343,41 @@ def activate(drone_id, init_pos, server=None, server_port=None, sim_dir="../simu
     # on successful completion return final position for reconnection
     return dest_pos
 
+def start_peer_listener(server, port, drone_id):
+
+    addr = (server, port)
+
+    peerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    peerSocket.bind(addr)
+
+    print("Starting peer listener on [{}] at port {}".format(server, port))
+    # try:
+    if True:
+        peerSocket.listen()
+        while True:
+            conn, address = peerSocket.accept()
+            # while True:
+            buff = conn.recv(sizeof(PeerPayload))
+            payload = PeerPayload.from_buffer_copy(buff)
+            print("Receieved payload")
+            curr_pos = p_controller.get_gps()
+
+            dist = geopy.distance.distance(curr_pos, (payload.lat, payload.lon, payload.height)).m
+            if dist <= seperation:
+                p_controller.set_deviation(seperation, bearing_dev, 0)
+                conn.send(PeerPayload(curr_pos[0], curr_pos[1], curr_pos[2], drone_id, bearing_dev, seperation))
+                print("Sending deviation: ", curr_pos[0], curr_pos[1], curr_pos[2], drone_id, bearing_dev, seperation)
+            else:
+                conn.send(PeerPayload(curr_pos[0], curr_pos[1], curr_pos[2], drone_id, 0, 0))
+                print("Sending gps: ", curr_pos[0], curr_pos[1], curr_pos[2], drone_id, 0, 0)
+            conn.close()
+    
+    # except Exception as e:
+    #     peerSocket.close()
 
 def main():
+    global server_config
+    global p_controller
 
     init_pos = default_pos
     server = default_server
@@ -195,10 +387,8 @@ def main():
     parser = argparse.ArgumentParser()
     
     parser.add_argument('--drone-id', help='Assign a unique id for this drone', type=int)
+    parser.add_argument('--server-id', help='Assign a unique id for this drone', type=int)
     parser.add_argument('--server-config', help='Server Configuration file', type=str)
-    parser.add_argument('--server', help='Base location server IP', type=str)
-    parser.add_argument('--server-port', help='Base location server port', type=int)
-    parser.add_argument('--position', help='Initial position', type=str)
 
     args = parser.parse_args()
     
@@ -206,23 +396,30 @@ def main():
         print("Provide --drone-id <ID>")
         exit(1)
 
-    if args.server is None and args.server_config is None:
-        print("Provide --server <IP> or --server-config <Server config file>")
+    if args.server_config is None:
+        print("Provide --server-config <Server config file>")
+        exit(1)
+    
+    if args.server_id is None and args.server_config is not None:
+        print("Provide --server_id <Server Id>")
         exit(1)
 
-    if args.server_port is None:
-        args.server_port = default_server_port
-    
-    if args.position is not None:
-        p = Point(args.position)
-        init_pos = (p.latitude, p.longitude)
+    server_config = args.server_config
+    init_pos, server, server_port = get_init_base_server(args.server_config, args.server_id)
+    peer_ip, peer_port = get_drone_conncetion(args.drone_id)
 
+    p_controller = PathController(init_pos[0], init_pos[1], 0)
+
+    #keep a peer listener open
+    peer_thread = threading.Thread(target=start_peer_listener, args=(peer_ip, peer_port, args.drone_id))
+    peer_thread.start()
+
+    is_start = True
     while True:
-        if args.server_config is not None:
-            get_base_sever(init_pos, args.server_config)
-            init_pos = activate(args.drone_id, init_pos, server=server, server_port=server_port)
-        else:
-            activate(args.drone_id, init_pos, server=server, server_port=server_port)
+        if args.server_config is not None and not is_start:
+            server, server_port = get_server_for_loc(args.server_config, init_pos)
+        init_pos = activate(args.drone_id, init_pos, server=server, server_port=server_port)
+        is_start = False
         break
 
 
