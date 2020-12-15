@@ -1,0 +1,4 @@
+geographiclib==1.50
+geopy==2.0.0
+gpxpy==1.4.2
+numpy==1.19.4
