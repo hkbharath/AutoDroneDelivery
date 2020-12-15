@@ -227,9 +227,9 @@ def get_simulation(init_pos, dest_pos, task_id):
         last_update = DroneUpdate(lat, lon, ele_v, bat_v, uv_v, sig_v, True, False)
         yield last_update
 
-        if uv_v:
+        if uv_v or p_controller.is_deviation_set():
             #get last alert drone and communicate the course
-            if not communicate_diversion():
+            if uv_v and not communicate_diversion():
                 continue
             
             (lat, lon) = next(gps_sim)
@@ -259,9 +259,11 @@ def predict_collision(curr_pos, dest_pos):
         d = geopy.distance.distance(my_pos, coll_pos).m
 
         if d <= 2*seperation:
-            conflict_pred.append(1)
+            preds.append(1)
         else:
-            conflict_pred.append(0)
+            preds.append(0)
+    
+    conflict_pred = preds
 
 def get_init_base_server(server_config, server_id):
     with open(server_config) as sc:
@@ -420,7 +422,7 @@ def main():
             server, server_port = get_server_for_loc(args.server_config, init_pos)
         init_pos = activate(args.drone_id, init_pos, server=server, server_port=server_port)
         is_start = False
-        break
+        #break
 
 
 if __name__ == "__main__":
