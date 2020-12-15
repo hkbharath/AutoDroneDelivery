@@ -9,8 +9,8 @@ SIMULATION="simulation"
 if [[ "$1" == "help" || "$1" == "-h" ]]
 then
     echo "Usage:"
-    echo "runme.sh drone <drone id> <server id>"
     echo "runme.sh server <server id>"
+    echo "runme.sh drone <drone id> <server id>"
     echo "runme.sh drone_monitor"
     echo "runme.sh help"
     exit 0

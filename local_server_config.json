@@ -3,7 +3,7 @@
         {
             "id" : 1,
             "name": "Loyola Institute, TCD",
-            "ip":"10.35.70.22",
+            "ip":"127.0.0.1",
             "drone_port":33001,
             "sync_port":33002,
             "location":{
@@ -14,9 +14,9 @@
         {
             "id" : 2,
             "name": "UCD School of Computer Science",
-            "ip":"10.35.70.9",
-            "drone_port":33001,
-            "sync_port":33002,
+            "ip":"127.0.0.1",
+            "drone_port":33003,
+            "sync_port":33004,
             "location":{
                 "lat": 53.309282, 
                 "lon": -6.223975
@@ -25,9 +25,9 @@
         {
             "id" : 3,
             "name": "Stokes Building, DCU",
-            "ip":"10.35.70.22",
-            "drone_port":33003,
-            "sync_port":33004,
+            "ip":"127.0.0.1",
+            "drone_port":33005,
+            "sync_port":33006,
             "location":{
                 "lat": 53.343464,
                 "lon": -6.251387
@@ -37,18 +37,18 @@
     "drones" : [
         {
             "id" : 1,
-            "ip":"10.35.70.35",
-            "peer_port": 33001
+            "ip":"127.0.0.1",
+            "peer_port": 33007
         },
         {
             "id" : 2,
-            "ip":"10.35.70.36",
-            "peer_port": 33001
+            "ip":"127.0.0.1",
+            "peer_port": 33008
         },
         {
             "id" : 3,
-            "ip":"10.35.70.42",
-            "peer_port": 33001
+            "ip":"127.0.0.1",
+            "peer_port": 33009
         }
     ]
 }
