@@ -22,6 +22,7 @@ max_height = 120 # in m
 seperation = 30 # in m
 bearing_dev = -90 # 90 to the left
 server_config = 'server_setup.json'
+simulation_dir = "../simulation"
 ###### Constant Configurations ######
 
 is_deviate = False
@@ -389,9 +390,9 @@ def main():
     parser = argparse.ArgumentParser()
     
     parser.add_argument('--drone-id', help='Assign a unique id for this drone', type=int)
-    parser.add_argument('--server-id', help='Assign a unique id for this drone', type=int)
+    parser.add_argument('--server-id', help='Assign a unique server id for this drone', type=int)
     parser.add_argument('--server-config', help='Server Configuration file', type=str)
-
+    parser.add_argument('--simulation-dir', help="Specify the custom simulation directory", type=str)
     args = parser.parse_args()
     
     if args.drone_id is None :
@@ -405,6 +406,9 @@ def main():
     if args.server_id is None and args.server_config is not None:
         print("Provide --server_id <Server Id>")
         exit(1)
+
+    if args.simulation_dir is not None:
+        simulation_dir = args.simulation_dir
 
     server_config = args.server_config
     init_pos, server, server_port = get_init_base_server(args.server_config, args.server_id)
@@ -420,7 +424,7 @@ def main():
     while True:
         if args.server_config is not None and not is_start:
             server, server_port = get_server_for_loc(args.server_config, init_pos)
-        init_pos = activate(args.drone_id, init_pos, server=server, server_port=server_port)
+        init_pos = activate(args.drone_id, init_pos, server=server, server_port=server_port, sim_dir=simulation_dir)
         is_start = False
         #break
 

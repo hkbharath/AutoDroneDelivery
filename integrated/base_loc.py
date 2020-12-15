@@ -314,6 +314,9 @@ def main():
     if args.record_dir is not None:
         record_path = args.record_dir
 
+    if not os.path.exists(record_path):
+        os.mkdir(record_path)
+    
     server = get_base_server_conf(server_config, args.server_id)
 
     task_queue = TaskQueue()
