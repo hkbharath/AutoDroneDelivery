@@ -240,8 +240,8 @@ def handle_client(conn, address, task_queue, conflict_mgr, server):
         print("socket is open and reading from it would block")
     except ConnectionResetError:
         print("socket was closed")
-    # except Exception as e:
-    #     print("Unexpected Exception!!")
+    except Exception as e:
+        print("Unexpected Exception: Closing the connection to the Drone.")
     
     return
 

@@ -22,7 +22,7 @@ ad_time = 3 #time taken for ascent and descent
 max_height = 120 # in m
 seperation = 30 # in m
 bearing_dev = -90 # 90 to the left
-server_config = 'server_setup.json'
+server_config = '../server_setup.json'
 simulation_dir = "../simulation"
 ###### Constant Configurations ######
 
@@ -180,37 +180,42 @@ def uv_simulation():
             yield conflict_pred.pop(0)
                                 
 def acc_det(lat, lon):
+    # simulate this accident scenario
     curr_pos = (float(lat), float(lon))
     acc_pos = (53.376988,-6.248487)
     d = geopy.distance.distance(curr_pos, acc_pos).m
     
-    if d<4000 :
-        import sendPodToRSU
+    try:
+        # if RSU is less than a KM then report the accident
+        if d <= 1000 :
+            import sendPodToRSU
+    except Exception as e:
+        print("Exception: Failed to report accident!!")
 
 def communicate_diversion():
     drone_id = p_controller.get_al_drone()
     p_addr  = get_drone_conncetion(drone_id)
     clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # try:
-    # Create a client socket
-    clientSocket.connect(p_addr)
-    print("Successfully connected to drone %s:%d"%(p_addr[0], p_addr[1]))
+    try:
+        # Create a client socket
+        clientSocket.connect(p_addr)
+        print("Successfully connected to drone %s:%d"%(p_addr[0], p_addr[1]))
 
-    # send current location
-    (lat, lon, ele) = p_controller.get_gps()
-    payload = PeerPayload(lat, lon, ele, 0, 0, 0)
-    clientSocket.send(payload)
-    
-    #receieve 
-    buff = clientSocket.recv(sizeof(PeerPayload))
-    payload = PeerPayload.from_buffer_copy(buff)
-    if payload.Deviation != 0:
-        print("Recieved deviation: ", payload.Deviation, payload.bearing)
-        p_controller.set_deviation(payload.Deviation, payload.bearing, 0)
-        return True
-    # except Exception as e:
-    #     print("Failed to connect to drone %s:%d"%(p_addr[0], p_addr[1]))
-    #     clientSocket.close()
+        # send current location
+        (lat, lon, ele) = p_controller.get_gps()
+        payload = PeerPayload(lat, lon, ele, 0, 0, 0)
+        clientSocket.send(payload)
+        
+        #receieve 
+        buff = clientSocket.recv(sizeof(PeerPayload))
+        payload = PeerPayload.from_buffer_copy(buff)
+        if payload.Deviation != 0:
+            print("Recieved deviation: ", payload.Deviation, payload.bearing)
+            p_controller.set_deviation(payload.Deviation, payload.bearing, 0)
+            return True
+    except Exception as e:
+        print("Failed to connect to drone %s:%d"%(p_addr[0], p_addr[1]))
+        clientSocket.close()
     return False
 
 def get_simulation(init_pos, dest_pos, task_id):
@@ -364,8 +369,7 @@ def start_peer_listener(server, port, drone_id):
     peerSocket.bind(addr)
 
     print("Starting peer listener on [{}] at port {}".format(server, port))
-    # try:
-    if True:
+    try:
         peerSocket.listen()
         while True:
             conn, address = peerSocket.accept()
@@ -385,8 +389,8 @@ def start_peer_listener(server, port, drone_id):
                 print("Sending gps: ", curr_pos[0], curr_pos[1], curr_pos[2], drone_id, 0, 0)
             conn.close()
     
-    # except Exception as e:
-    #     peerSocket.close()
+    except Exception as e:
+        peerSocket.close()
 
 def main():
     global server_config

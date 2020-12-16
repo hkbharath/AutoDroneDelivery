@@ -1,7 +1,7 @@
 #!/bin/bash
 
 VENV_NAME="environment"
-SERVER_CONFIG="server_setup.json"
+SERVER_CONFIG="local_server_config.json"
 RECORD_PREFIX="record"
 CODEBASE="integrated"
 SIMULATION="simulation"
