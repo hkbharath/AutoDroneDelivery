@@ -43,5 +43,5 @@ then
     python $CODEBASE/base_loc.py --server-id $2 --server-config $SERVER_CONFIG --record-dir "${RECORD_PREFIX}_$2"
 elif [[ "$1" == "drone_monitor" ]]
 then
-    python integrated2/base_loc.py --drone-id 3 --server-id 3 --server-config $SERVER_CONFIG --simulation-dir $SIMULATION
+    python integrated/base_loc.py --drone-id 3 --server-id 3 --server-config $SERVER_CONFIG --simulation-dir $SIMULATION
 fi
