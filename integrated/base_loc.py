@@ -16,6 +16,7 @@ package_weight = 5 # in kg
 default_port = 33001
 default_dest1 = (53.309282, -6.223975)
 default_dest2 = (53.343473, -6.251387)
+default_dest3 = (53.385552, -6.256092)
 record_path = "../record"
 server_config = None
 ###### Constant Configurations ######
@@ -282,12 +283,14 @@ def start_sync_server(server, port, conflict_mgr):
         serverSocket.close()
 
 def start_task_sim(task_queue, server_id):
-    if server_id == 1:
-        task_queue.add_task(BaseTask(1,5,default_dest1[0], default_dest1[1]))
-    elif server_id == 2:
-        task_queue.add_task(BaseTask(2,5,default_dest2[0], default_dest2[1]))
     while True:
-        time.sleep(10)
+        if server_id == 1:
+            task_queue.add_task(BaseTask(1,5,default_dest1[0], default_dest1[1]))
+        elif server_id == 2:
+            task_queue.add_task(BaseTask(2,5,default_dest2[0], default_dest2[1]))
+        elif server_id == 3:
+            task_queue.add_task(BaseTask(3,5,default_dest2[0], default_dest2[1]))
+        time.sleep(310)
 
 def main():
     global record_path

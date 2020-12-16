@@ -14,7 +14,7 @@
         {
             "id" : 2,
             "name": "UCD School of Computer Science",
-            "ip":"10.35.70.9",
+            "ip":"10.35.70.35",
             "drone_port":33001,
             "sync_port":33002,
             "location":{
@@ -29,15 +29,15 @@
             "drone_port":33003,
             "sync_port":33004,
             "location":{
-                "lat": 53.343464,
-                "lon": -6.251387
+                "lat": 53.385552,
+                "lon": -6.256092
             }
         }
     ],
     "drones" : [
         {
             "id" : 1,
-            "ip":"10.35.70.35",
+            "ip":"10.35.70.9",
             "peer_port": 33001
         },
         {
