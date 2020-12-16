@@ -6,6 +6,7 @@ import os
 import math
 import json
 import threading
+from threading import Thread
 import geopy.distance
 from payloads import *
 from geopy.point import Point
@@ -162,6 +163,7 @@ def path_sim(l_start, l_stop, is_conflict_pred=False):
         else:
             n_lat = n_lat + d_lat
             n_lon = m * n_lat + b
+            Thread(target = acc_det(n_lat, n_lon)).start()
             
             yield (n_lat, n_lon)
             ti = ti + 1
@@ -176,6 +178,14 @@ def uv_simulation():
             yield 0
         else:
             yield conflict_pred.pop(0)
+                                
+def acc_det(lat, lon):
+    curr_pos = (float(lat), float(lon))
+    acc_pos = (53.376988,-6.248487)
+    d = geopy.distance.distance(curr_pos, acc_pos).m
+    
+    if d<4000 :
+        import sendPodToRSU
 
 def communicate_diversion():
     drone_id = p_controller.get_al_drone()
