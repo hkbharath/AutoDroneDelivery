@@ -42,7 +42,7 @@ class MySubscribeCallback(SubscribeCallback):
 accidentSignalData1 = PostAccidentSignalData("X", "Vehicle-11", "-6.254735", "53.343639")
 
 def sendToPod1RSU():
-    print("connected")
+    #print("connected")
     pubnub.add_listener(MySubscribeCallback())
     pubnub.subscribe().channels("RSU-4").execute()
     pubnub.publish().channel("RSU-4").message({
