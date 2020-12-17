@@ -8,5 +8,5 @@ Current System configuration can be found in `local_setup.json`, which can be us
 
 `   bash runme.sh server <server id>`
 
-`   bashrunme.sh drone <drone id> <server id>`
+`   bash runme.sh drone <drone id> <server id>`
 
